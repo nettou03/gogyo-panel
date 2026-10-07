@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#26244A">
+<meta name="description" content="パネルを入れ替えて同じ字を3つそろえる、せり上がり型パズル">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="五行パネル">
+<title>五行パネル</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #ECE6DA; --ink: #22203A; --muted: #5E5A75; --board: #26244A;
+    --sheet: rgba(255,252,246,0.96); --accent: #E4572E;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #15142A; --ink: #F1EEF8; --muted: #A9A5C4; --sheet: rgba(32,30,62,0.97); }
+  }
+  :root[data-theme="dark"] { --bg: #15142A; --ink: #F1EEF8; --muted: #A9A5C4; --sheet: rgba(32,30,62,0.97); }
+  html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); }
+  *, *::before, *::after { box-sizing: inherit; }
+  body {
+    margin: 0; height: 100%; overflow: hidden; display: flex; flex-direction: column;
+    background: var(--bg); color: var(--ink);
+    font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; overscroll-behavior: none;
+  }
+  header { display: flex; justify-content: center; gap: 22px; padding: 10px 16px 6px; }
+  .stat { text-align: center; min-width: 56px; }
+  .stat small { display: block; font-size: 11px; color: var(--muted); }
+  .stat b { font-family: "Dela Gothic One", sans-serif; font-weight: 400; font-size: 22px; font-variant-numeric: tabular-nums; }
+  #wrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 4px 12px; position: relative; }
+  canvas { display: block; border-radius: 12px; touch-action: none; box-shadow: 0 10px 30px rgba(20,18,50,0.35); }
+  footer { display: flex; gap: 10px; justify-content: center; padding: 8px 16px 14px; }
+  .ctl {
+    border: 0; border-radius: 14px; padding: 14px 20px; cursor: pointer; touch-action: none;
+    font: 800 16px/1 "M PLUS Rounded 1c", sans-serif; background: var(--board); color: #fff;
+  }
+  #raiseBtn { flex: 0 1 220px; }
+  #raiseBtn.on { background: var(--accent); }
+  .ctl.alt { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 2px var(--muted); }
+  .ctl:focus-visible, .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+  .overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; padding: 24px; background: rgba(15,13,35,0.45); }
+  .overlay.show { display: flex; }
+  .sheet { background: var(--sheet); border-radius: 22px; padding: 28px 24px 22px; width: min(350px, 100%); text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.35); }
+  .logo { font-family: "Dela Gothic One", sans-serif; font-size: 44px; line-height: 1.1; margin: 0 0 14px; }
+  .chips { display: flex; justify-content: center; gap: 6px; margin-bottom: 16px; }
+  .chips span { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; color: #fff; font-family: "Dela Gothic One", sans-serif; font-size: 18px; }
+  h2 { font-family: "Dela Gothic One", sans-serif; font-weight: 400; font-size: 30px; margin: 0 0 8px; }
+  p { margin: 0 0 18px; color: var(--muted); font-size: 14px; line-height: 1.75; text-align: left; }
+  .big { font-family: "Dela Gothic One", sans-serif; font-size: 40px; margin: 4px 0; font-variant-numeric: tabular-nums; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+  .btn { display: block; width: 100%; padding: 15px; margin-top: 10px; border: 0; border-radius: 14px; cursor: pointer; font: 800 17px/1 "M PLUS Rounded 1c", sans-serif; background: var(--board); color: #fff; }
+  .btn.alt { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 2px var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="stat"><small>スコア</small><b id="hScore">0</b></div>
+  <div class="stat"><small>レベル</small><b id="hLevel">1</b></div>
+  <div class="stat"><small>時間</small><b id="hTime">0:00</b></div>
+  <div class="stat"><small>最大連鎖</small><b id="hChain">0</b></div>
+</header>
+<div id="wrap"><canvas id="c" aria-label="パズル盤面"></canvas></div>
+<footer>
+  <button class="ctl" id="raiseBtn">せり上げ</button>
+  <button class="ctl alt" id="muteBtn">♪ 音あり</button>
+  <button class="ctl alt" id="pauseBtn" aria-label="一時停止">一時停止</button>
+</footer>
+
+<div class="overlay show" id="menu">
+  <div class="sheet">
+    <div class="logo">五行パネル</div>
+    <div class="chips" id="chips"></div>
+    <p>パネルを左右にスワイプすると隣のパネルと入れ替わります（隣り合う2枚を順にタップしても入れ替え可）。同じ字を縦か横に3つ以上そろえると消え、落ちてきたパネルがまたそろうと連鎖です。盤面は少しずつせり上がるので、一番上まで積もらないように消し続けてください。</p>
+    <button class="btn" id="startBtn">始める</button>
+  </div>
+</div>
+<div class="overlay" id="pauseMenu">
+  <div class="sheet">
+    <h2>一時停止中</h2>
+    <button class="btn" id="resumeBtn">続ける</button>
+    <button class="btn alt" id="quitBtn">最初からやり直す</button>
+  </div>
+</div>
+<div class="overlay" id="endMenu">
+  <div class="sheet">
+    <h2>ゲームオーバー</h2>
+    <div class="big" id="endScore">0</div>
+    <div class="sub" id="endSub"></div>
+    <button class="btn" id="againBtn">もう一度</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const COLS = 6, ROWS = 12;
+  const SWAPF = 6, HOVER = 10, FLASH = 40, POPF = 8, GRACE = 120;
+  const COLORS = [
+    { k: '火', c: '#E4572E' }, { k: '水', c: '#2F80D1' }, { k: '木', c: '#3A9D5D' },
+    { k: '金', c: '#D9A21B' }, { k: '土', c: '#9A5FC0' },
+  ];
+  const $ = id => document.getElementById(id);
+  const cv = $('c'), ctx = cv.getContext('2d'), wrap = $('wrap');
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  $('chips').innerHTML = COLORS.map(o => `<span style="background:${o.c}">${o.k}</span>`).join('');
+
+  let g, preview, rise, raising, stopT, graceT, frames, score, chain, maxChain, groups, popups, running, paused;
+  let drag = null, pending = null, sel = null, cursor = { x: 2, y: 8 }, showCursor = false;
+  let best = 0;
+  try { best = Number(localStorage.getItem('gogyo-best')) || 0; } catch (e) {}
+
+  const rnd = n => Math.floor(Math.random() * n);
+  const mk = c => ({ c, s: 'idle', t: 0, chain: false, dir: 0, grp: null, pi: 0, f: -1 });
+  const colorAt = (y, x) => (y >= 0 && y < ROWS && x >= 0 && x < COLS && g[y][x]) ? g[y][x].c : -1;
+
+  function pickColor(bad) {
+    const opts = [...Array(COLORS.length).keys()].filter(i => !bad.includes(i));
+    return opts[rnd(opts.length)];
+  }
+
+  function newBoard() {
+    g = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+    for (let x = 0; x < COLS; x++) {
+      const h = 3 + rnd(4);
+      for (let y = ROWS - 1; y >= ROWS - h; y--) {
+        const bad = [];
+        if (colorAt(y, x - 1) >= 0 && colorAt(y, x - 1) === colorAt(y, x - 2)) bad.push(colorAt(y, x - 1));
+        if (colorAt(y + 1, x) >= 0 && colorAt(y + 1, x) === colorAt(y + 2, x)) bad.push(colorAt(y + 1, x));
+        g[y][x] = mk(pickColor(bad));
+      }
+    }
+    preview = genRow();
+  }
+
+  function genRow() {
+    const row = [];
+    for (let x = 0; x < COLS; x++) {
+      const bad = [];
+      if (x >= 2 && row[x - 1] === row[x - 2]) bad.push(row[x - 1]);
+      const a = colorAt(ROWS - 1, x), b = colorAt(ROWS - 2, x);
+      if (a >= 0 && a === b) bad.push(a);
+      row.push(pickColor(bad));
+    }
+    return row;
+  }
+
+  function reset() {
+    newBoard();
+    rise = 0; raising = false; stopT = 0; graceT = 0; frames = 0;
+    score = 0; chain = 1; maxChain = 0; groups = []; popups = []; drag = null;
+    cursor = { x: 2, y: 8 };
+  }
+
+  // ---------- sound (original BGM + effects, generated with Web Audio) ----------
+  const Sound = (() => {
+    let ac = null, master, bgm, sfx, bassLP, leadLP, noiseBuf, timer = null;
+    let nextTime = 0, step = 0, tempo = 126, musicOn = false, muted = false;
+    try { muted = localStorage.getItem('gogyo-mute') === '1'; } catch (e) {}
+    const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+
+    // 16 bars: A section then B section. Melody = [midi, eighths] pairs, null = rest.
+    const MEL = [
+      [76,2, 79,1, 81,1, 79,2, 76,2], [72,1, 74,1, 76,2, 69,2, null,2],
+      [81,2, 79,1, 81,1, 84,2, 81,2], [79,3, 76,1, 74,4],
+      [76,1, 76,1, 79,2, 81,1, 79,1, 76,2], [74,2, 72,1, 74,1, 76,2, 69,2],
+      [72,2, 74,2, 76,2, 79,2], [76,1, 74,1, 72,2, null,4],
+      [81,1, 84,1, 81,1, 79,1, 81,4], [79,1, 81,1, 79,1, 76,1, 74,4],
+      [76,2, 79,2, 83,2, 79,2], [81,3, 79,1, 76,4],
+      [84,2, 81,1, 84,1, 86,2, 84,2], [83,2, 81,1, 79,1, 74,2, 79,2],
+      [76,1, 79,1, 84,2, 79,1, 76,1, 79,2], [74,2, 76,1, 74,1, 71,2, 74,2],
+    ];
+    const ROOT = [48,45,41,43, 48,45,[41,43],48, 41,43,40,45, 41,43,48,43];
+    const CH = { 48:[60,64,67], 45:[57,60,64], 41:[60,65,69], 43:[59,62,67], 40:[59,64,67] };
+    const TOTAL = MEL.length * 16;
+    const melAt = new Array(TOTAL).fill(null);
+    MEL.forEach((bar, b) => {
+      let s = b * 16;
+      for (let i = 0; i < bar.length; i += 2) { if (bar[i] !== null) melAt[s] = [bar[i], bar[i + 1] * 2]; s += bar[i + 1] * 2; }
+    });
+    const rootAt = s => { const r = ROOT[Math.floor(s / 16)]; return Array.isArray(r) ? r[(s % 16) < 8 ? 0 : 1] : r; };
+
+    function init() {
+      if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      ac = new AC();
+      master = ac.createGain(); master.gain.value = muted ? 0 : 0.9; master.connect(ac.destination);
+      const comp = ac.createDynamicsCompressor(); comp.connect(master);
+      bgm = ac.createGain(); bgm.gain.value = 0.55; bgm.connect(comp);
+      sfx = ac.createGain(); sfx.gain.value = 0.7; sfx.connect(comp);
+      bassLP = ac.createBiquadFilter(); bassLP.type = 'lowpass'; bassLP.frequency.value = 700; bassLP.connect(bgm);
+      leadLP = ac.createBiquadFilter(); leadLP.type = 'lowpass'; leadLP.frequency.value = 3200; leadLP.connect(bgm);
+      noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    function tone(dest, type, freq, t, dur, vol, slideTo) {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = type; o.frequency.setValueAtTime(freq, t);
+      if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(dest); o.start(t); o.stop(t + dur + 0.03);
+    }
+    function noise(t, dur, vol, hp) {
+      const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+      s.buffer = noiseBuf; f.type = 'highpass'; f.frequency.value = hp;
+      g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      s.connect(f); f.connect(g); g.connect(bgm); s.start(t); s.stop(t + dur + 0.02);
+    }
+    function playStep(s, t) {
+      const sd = 60 / tempo / 4, i = s % 16;
+      // drums
+      if (i === 0 || i === 8 || i === 14) tone(bgm, 'sine', 150, t, 0.16, 0.7, 45);
+      if (i === 4 || i === 12) noise(t, 0.12, 0.28, 1500);
+      if (i % 2 === 0) noise(t, 0.03, 0.08, 7000);
+      // bass: bouncing eighths
+      if (i % 2 === 0) { const r = rootAt(s); tone(bassLP, 'square', mtof(r + (i % 4 === 2 ? 12 : 0)), t, sd * 1.7, 0.16); }
+      // arpeggio on off-beats
+      if (i % 2 === 1) { const ch = CH[rootAt(s)]; tone(bgm, 'triangle', mtof(ch[(i >> 1) % 3] + 12), t, sd * 1.2, 0.07); }
+      // lead
+      const m = melAt[s];
+      if (m) { tone(leadLP, 'square', mtof(m[0]), t, m[1] * sd * 0.9, 0.075); tone(leadLP, 'triangle', mtof(m[0] - 12), t, m[1] * sd * 0.9, 0.06); }
+    }
+    function schedule() {
+      if (!ac || !musicOn) return;
+      while (nextTime < ac.currentTime + 0.12) {
+        playStep(step, nextTime);
+        nextTime += 60 / tempo / 4;
+        step = (step + 1) % TOTAL;
+      }
+    }
+    function startMusic() {
+      if (!ac) return;
+      musicOn = true; step = 0; nextTime = ac.currentTime + 0.08;
+      clearInterval(timer); timer = setInterval(schedule, 25);
+    }
+    function stopMusic() { musicOn = false; clearInterval(timer); }
+    function pause(v) {
+      if (!ac) return;
+      if (v) { clearInterval(timer); ac.suspend(); }
+      else { ac.resume().then(() => { nextTime = ac.currentTime + 0.05; if (musicOn) { clearInterval(timer); timer = setInterval(schedule, 25); } }); }
+    }
+    function setTempo(level, danger) { tempo = danger ? 156 : 124 + level * 2; }
+    const PENTA = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
+    return {
+      init, startMusic, stopMusic, pause, setTempo,
+      get muted() { return muted; },
+      toggleMute() {
+        muted = !muted;
+        try { localStorage.setItem('gogyo-mute', muted ? '1' : '0'); } catch (e) {}
+        if (master) master.gain.setTargetAtTime(muted ? 0 : 0.9, ac.currentTime, 0.02);
+        return muted;
+      },
+      swap() { if (ac) tone(sfx, 'triangle', 1180, ac.currentTime, 0.06, 0.3, 1500); },
+      pop(i, ch) {
+        if (!ac) return;
+        const m = 72 + Math.min(12, (ch - 1) * 2) + PENTA[Math.min(i, PENTA.length - 1)];
+        tone(sfx, 'square', mtof(m), ac.currentTime, 0.09, 0.09);
+        tone(sfx, 'triangle', mtof(m + 12), ac.currentTime, 0.12, 0.12);
+      },
+      chain(n) {
+        if (!ac) return;
+        const t = ac.currentTime, b = 67 + Math.min(10, n * 2);
+        [0, 4, 7, 12].forEach((d, k) => tone(sfx, 'square', mtof(b + d), t + k * 0.05, 0.12, 0.1));
+      },
+      over() {
+        if (!ac) return;
+        const t = ac.currentTime;
+        [72, 67, 64, 60, 55].forEach((m, k) => tone(sfx, 'triangle', mtof(m), t + k * 0.14, 0.3, 0.25));
+      },
+    };
+  })();
+
+  // ---------- rules ----------
+  function trySwap(x, y) {
+    if (x < 0 || x >= COLS - 1 || y < 0 || y >= ROWS) return false;
+    const a = g[y][x], b = g[y][x + 1];
+    if (!a && !b) return false;
+    if ((a && a.s !== 'idle') || (b && b.s !== 'idle')) return false;
+    if (y > 0) {
+      const aa = g[y - 1][x], ab = g[y - 1][x + 1];
+      if (!a && aa && (aa.s === 'hover' || aa.s === 'fall')) return false;
+      if (!b && ab && (ab.s === 'hover' || ab.s === 'fall')) return false;
+    }
+    g[y][x] = b; g[y][x + 1] = a;
+    if (a) { a.s = 'swap'; a.t = SWAPF; a.dir = -1; }
+    if (b) { b.s = 'swap'; b.t = SWAPF; b.dir = 1; }
+    Sound.swap();
+    return true;
+  }
+
+  function stackAbove(x, y, fn) {
+    for (let yy = y - 1; yy >= 0; yy--) {
+      const c = g[yy][x];
+      if (!c || !(c.s === 'idle' || c.s === 'hover')) break;
+      fn(c);
+    }
+  }
+
+  function tick() {
+    frames++;
+    // swaps
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+      const c = g[y][x];
+      if (c && c.s === 'swap' && --c.t <= 0) c.s = 'idle';
+    }
+    // clearing groups
+    for (let i = groups.length - 1; i >= 0; i--) {
+      const gr = groups[i];
+      gr.t++;
+      { const k = gr.t - FLASH; if (k >= 0 && k % POPF === 0 && k / POPF < gr.cells.length) Sound.pop(k / POPF, gr.chain); }
+      if (gr.t >= gr.end) {
+        for (const p of gr.cells) g[p.y][p.x] = null;
+        for (const p of gr.cells) stackAbove(p.x, p.y, c => { c.chain = true; c.s = 'hover'; c.t = HOVER; c.f = frames; });
+        groups.splice(i, 1);
+      }
+    }
+    // gravity (bottom-up)
+    for (let y = ROWS - 1; y >= 0; y--) for (let x = 0; x < COLS; x++) {
+      const c = g[y][x];
+      if (!c) continue;
+      const below = y === ROWS - 1 ? 'floor' : g[y + 1][x];
+      if (c.s === 'idle' && below === null) {
+        c.s = 'hover'; c.t = HOVER; c.f = frames;
+        stackAbove(x, y, d => { d.s = 'hover'; d.t = HOVER; d.f = frames; });
+      } else if (c.s === 'hover' && c.f !== frames) {
+        if (--c.t <= 0) { c.s = 'fall'; stackAbove(x, y, d => { d.s = 'fall'; }); }
+      }
+      if (c.s === 'fall') {
+        if (below === null) { g[y + 1][x] = c; g[y][x] = null; }
+        else if (below === 'floor' || below.s !== 'fall') { c.s = 'idle'; }
+      }
+    }
+    findMatches();
+    // chain flags only survive while panels are in the air
+    let anyChain = false;
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+      const c = g[y][x];
+      if (!c) continue;
+      if (c.s === 'idle' || c.s === 'swap') c.chain = false;
+      if (c.chain) anyChain = true;
+    }
+    if (!anyChain && groups.length === 0) chain = 1;
+
+    // buffered swap (if the panel was busy when swiped)
+    if (pending) {
+      if (!g[pending.y] || g[pending.y][pending.x] !== pending.cell) pending = null;
+      else if (trySwap(pending.dir > 0 ? pending.x : pending.x - 1, pending.y)) pending = null;
+      else if (--pending.ttl <= 0) pending = null;
+    }
+    if (sel && (!g[sel.y] || g[sel.y][sel.x] !== sel.cell)) sel = null;
+
+    // rising
+    const level = levelNow();
+    const clearing = groups.length > 0;
+    const topped = g[0].some(c => c);
+    if (clearing) { /* frozen */ }
+    else if (stopT > 0) { stopT--; }
+    else if (topped) {
+      raising = false;
+      if (++graceT > GRACE) return gameOver();
+    } else {
+      graceT = 0;
+      rise += raising ? 0.12 : 1 / Math.max(60, 300 - 30 * (level - 1));
+      if (rise >= 1) {
+        if (raising) { score += 1; raising = false; }
+        rise = 0;
+        g.shift();
+        g.push(preview.map(mk));
+        preview = genRow();
+        for (const o of [drag, pending, sel]) if (o) o.y--;
+        if (drag && drag.y < 0) drag = null;
+        if (pending && pending.y < 0) pending = null;
+        if (sel && sel.y < 0) sel = null;
+        cursor.y = Math.max(0, cursor.y - 1);
+      }
+    }
+    if (!topped) graceT = 0;
+    Sound.setTempo(level, g[1].some(c => c));
+    for (const p of popups) p.life--;
+    popups = popups.filter(p => p.life > 0);
+  }
+
+  function findMatches() {
+    const hit = new Set();
+    const ok = (y, x) => g[y][x] && g[y][x].s === 'idle';
+    for (let y = 0; y < ROWS; y++) {
+      let run = 1;
+      for (let x = 1; x <= COLS; x++) {
+        if (x < COLS && ok(y, x) && ok(y, x - 1) && g[y][x].c === g[y][x - 1].c) run++;
+        else { if (run >= 3) for (let k = x - run; k < x; k++) hit.add(y * COLS + k); run = 1; }
+      }
+    }
+    for (let x = 0; x < COLS; x++) {
+      let run = 1;
+      for (let y = 1; y <= ROWS; y++) {
+        if (y < ROWS && ok(y, x) && ok(y - 1, x) && g[y][x].c === g[y - 1][x].c) run++;
+        else { if (run >= 3) for (let k = y - run; k < y; k++) hit.add(k * COLS + x); run = 1; }
+      }
+    }
+    if (!hit.size) return;
+    const cells = [...hit].sort((a, b) => a - b).map(i => ({ y: Math.floor(i / COLS), x: i % COLS }));
+    const isChain = cells.some(p => g[p.y][p.x].chain);
+    const n = cells.length;
+    if (isChain) { chain++; maxChain = Math.max(maxChain, chain); }
+    const gr = { cells, t: 0, end: FLASH + POPF * n + 6, chain: isChain ? chain : 1 };
+    cells.forEach((p, i) => { const c = g[p.y][p.x]; c.s = 'clear'; c.grp = gr; c.pi = i; });
+    groups.push(gr);
+
+    let pts = n * 10;
+    if (n > 3) pts += (n - 3) * 30 + (n - 4) * 20;
+    if (isChain) pts += Math.round(50 * Math.pow(chain - 1, 1.6));
+    score += pts;
+    const top = cells[0];
+    if (isChain) popups.push({ text: `${chain}連鎖`, x: top.x, y: top.y, life: 70, hot: true });
+    if (n > 3) popups.push({ text: `${n}同時`, x: top.x, y: top.y + (isChain ? 1 : 0), life: 70, hot: false });
+    if (n > 3 || isChain) stopT = Math.max(stopT, 40 + (n > 3 ? n * 8 : 0) + (isChain ? chain * 35 : 0));
+    try { navigator.vibrate && navigator.vibrate(isChain ? 30 : 12); } catch (e) {}
+    if (isChain) Sound.chain(chain);
+  }
+
+  const levelNow = () => Math.min(10, 1 + Math.floor(frames / (60 * 30)));
+
+  function gameOver() {
+    running = false;
+    drag = null; pending = null; sel = null;
+    Sound.stopMusic(); Sound.over();
+    const newBest = score > best;
+    if (newBest) { best = score; try { localStorage.setItem('gogyo-best', String(best)); } catch (e) {} }
+    $('endScore').textContent = score.toLocaleString();
+    $('endSub').textContent = newBest ? '自己ベスト更新' : `自己ベスト ${best.toLocaleString()}`;
+    $('endMenu').classList.add('show');
+    $('againBtn').focus({ preventScroll: true });
+  }
+
+  // ---------- rendering ----------
+  let cell = 40, dpr = 1, tiles = [];
+  function layout() {
+    dpr = Math.min(devicePixelRatio || 1, 3);
+    const w = wrap.clientWidth - 24, h = wrap.clientHeight - 8;
+    cell = Math.max(16, Math.floor(Math.min(w / COLS, h / ROWS)));
+    cv.style.width = cell * COLS + 'px'; cv.style.height = cell * ROWS + 'px';
+    cv.width = cell * COLS * dpr; cv.height = cell * ROWS * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    buildTiles();
+  }
+
+  function rr(c2, x, y, w, h, r) {
+    c2.beginPath(); c2.moveTo(x + r, y);
+    c2.arcTo(x + w, y, x + w, y + h, r); c2.arcTo(x + w, y + h, x, y + h, r);
+    c2.arcTo(x, y + h, x, y, r); c2.arcTo(x, y, x + w, y, r); c2.closePath();
+  }
+
+  function buildTiles() {
+    tiles = COLORS.map(o => {
+      const oc = document.createElement('canvas');
+      oc.width = oc.height = cell * dpr;
+      const t = oc.getContext('2d'); t.scale(dpr, dpr);
+      const m = Math.max(1.5, cell * 0.05), s = cell - m * 2, r = cell * 0.18;
+      rr(t, m, m, s, s, r); t.fillStyle = o.c; t.fill();
+      const gr = t.createLinearGradient(0, m, 0, m + s);
+      gr.addColorStop(0, 'rgba(255,255,255,0.35)'); gr.addColorStop(0.5, 'rgba(255,255,255,0)'); gr.addColorStop(1, 'rgba(0,0,0,0.18)');
+      rr(t, m, m, s, s, r); t.fillStyle = gr; t.fill();
+      t.font = `${Math.round(cell * 0.52)}px "Dela Gothic One", "Hiragino Sans", sans-serif`;
+      t.textAlign = 'center'; t.textBaseline = 'middle';
+      t.fillStyle = 'rgba(0,0,0,0.22)'; t.fillText(o.k, cell / 2 + 1, cell / 2 + 2);
+      t.fillStyle = '#fff'; t.fillText(o.k, cell / 2, cell / 2 + 1);
+      return oc;
+    });
+  }
+
+  function draw() {
+    const W = cell * COLS, H = cell * ROWS;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#26244A'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(255,255,255,0.035)';
+    for (let x = 0; x < COLS; x += 2) ctx.fillRect(x * cell, 0, cell, H);
+    if (!g) return;
+
+    // danger tint
+    const now = performance.now();
+    for (let x = 0; x < COLS; x++) {
+      let h = 0; for (let y = 0; y < ROWS; y++) if (g[y][x]) { h = ROWS - y; break; }
+      if (h >= ROWS - 1) {
+        ctx.fillStyle = `rgba(228,87,46,${0.18 + 0.12 * Math.sin(now / 120)})`;
+        ctx.fillRect(x * cell, 0, cell, H);
+      }
+    }
+
+    const oy = -rise * cell;
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+      const c = g[y][x]; if (!c) continue;
+      let dx = x, alpha = 1, scale = 1, flashOn = false;
+      if (c.s === 'swap') { const k = c.t / SWAPF; dx = x + c.dir * k * k * (3 - 2 * k); }
+      if (c.s === 'clear') {
+        const gt = c.grp.t;
+        if (gt < FLASH) flashOn = !reduceMotion && Math.floor(gt / 4) % 2 === 0;
+        else {
+          const popAt = FLASH + c.pi * POPF;
+          if (gt >= popAt + POPF) continue;
+          if (gt >= popAt) { const k = (gt - popAt) / POPF; scale = 1 + k * 0.3; alpha = 1 - k; }
+          else alpha = 0.55;
+        }
+      }
+      const px = dx * cell, py = y * cell + oy;
+      ctx.globalAlpha = alpha;
+      if (scale !== 1) {
+        const s = cell * scale, off = (s - cell) / 2;
+        ctx.drawImage(tiles[c.c], px - off, py - off, s, s);
+      } else ctx.drawImage(tiles[c.c], px, py, cell, cell);
+      if (flashOn) { ctx.fillStyle = 'rgba(255,255,255,0.65)'; rr(ctx, px + 2, py + 2, cell - 4, cell - 4, cell * 0.18); ctx.fill(); }
+      ctx.globalAlpha = 1;
+    }
+    // preview row
+    ctx.globalAlpha = 0.35;
+    for (let x = 0; x < COLS; x++) ctx.drawImage(tiles[preview[x]], x * cell, ROWS * cell + oy, cell, cell);
+    ctx.globalAlpha = 1;
+
+    // drag highlight
+    const hl = (drag && drag.cell && !drag.done) ? drag : sel;
+    if (hl) {
+      ctx.strokeStyle = hl === sel ? '#FFD34D' : '#fff'; ctx.lineWidth = 3;
+      rr(ctx, hl.x * cell + 1.5, hl.y * cell + oy + 1.5, cell - 3, cell - 3, cell * 0.2); ctx.stroke();
+    }
+    // keyboard cursor
+    if (showCursor && running) {
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+      rr(ctx, cursor.x * cell + 1.5, cursor.y * cell + oy + 1.5, cell * 2 - 3, cell - 3, cell * 0.2); ctx.stroke();
+    }
+    // popups
+    for (const p of popups) {
+      const k = 1 - p.life / 70;
+      ctx.globalAlpha = Math.min(1, p.life / 20);
+      const fs = cell * 0.5;
+      ctx.font = `${fs}px "Dela Gothic One", sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const tx = Math.min(Math.max((p.x + 0.5) * cell, fs * 1.4), W - fs * 1.4);
+      const ty = (p.y + 0.5) * cell + oy - k * cell * 0.8;
+      const tw = ctx.measureText(p.text).width + fs * 0.6;
+      ctx.fillStyle = p.hot ? '#E4572E' : '#FFFFFF';
+      rr(ctx, tx - tw / 2, ty - fs * 0.7, tw, fs * 1.4, fs * 0.3); ctx.fill();
+      ctx.fillStyle = p.hot ? '#FFFFFF' : '#26244A';
+      ctx.fillText(p.text, tx, ty + 1);
+      ctx.globalAlpha = 1;
+    }
+    if (stopT > 0 && running) {
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.fillRect(0, 0, W * Math.min(1, stopT / 240), 4);
+    }
+  }
+
+  // ---------- HUD ----------
+  const hud = { s: $('hScore'), l: $('hLevel'), t: $('hTime'), c: $('hChain') };
+  let lastHud = '';
+  function updateHud() {
+    const sec = Math.floor(frames / 60);
+    const vals = [score.toLocaleString(), levelNow(), `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`, maxChain];
+    const key = vals.join('|');
+    if (key === lastHud) return;
+    lastHud = key;
+    hud.s.textContent = vals[0]; hud.l.textContent = vals[1]; hud.t.textContent = vals[2]; hud.c.textContent = vals[3];
+  }
+
+  // ---------- loop ----------
+  let last = performance.now(), acc = 0;
+  function loop(now) {
+    acc += Math.min(0.1, (now - last) / 1000); last = now;
+    while (acc >= 1 / 60) { if (running && !paused) tick(); acc -= 1 / 60; }
+    draw(); updateHud();
+    $('raiseBtn').classList.toggle('on', raising);
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- input ----------
+  function boardPos(e) {
+    const r = cv.getBoundingClientRect();
+    const x = Math.floor((e.clientX - r.left) / cell);
+    const y = Math.floor((e.clientY - r.top + rise * cell) / cell);
+    return { x: Math.max(0, Math.min(COLS - 1, x)), y };
+  }
+  function requestSwap(x, y, dir, c) {
+    if (x + dir < 0 || x + dir >= COLS) return;
+    if (!trySwap(dir > 0 ? x : x - 1, y)) pending = { x, y, dir, cell: c, ttl: 10 };
+  }
+  cv.addEventListener('pointerdown', e => {
+    if (!running || paused) return;
+    e.preventDefault(); showCursor = false;
+    const p = boardPos(e);
+    if (p.y < 0 || p.y >= ROWS) { sel = null; return; }
+    drag = { x: p.x, y: p.y, cell: g[p.y][p.x], id: e.pointerId, sx: e.clientX, sy: e.clientY, done: false };
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!drag || drag.done || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (Math.abs(dx) > cell * 0.3 && Math.abs(dx) > Math.abs(dy)) {
+      drag.done = true; sel = null;
+      if (drag.cell) requestSwap(drag.x, drag.y, dx > 0 ? 1 : -1, drag.cell);
+    }
+  });
+  cv.addEventListener('pointerup', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (!drag.done) {
+      if (sel && sel.y === drag.y && Math.abs(sel.x - drag.x) === 1) {
+        const dir = drag.x - sel.x;
+        requestSwap(sel.x, sel.y, dir, sel.cell);
+        sel = null;
+      } else if (drag.cell && !(sel && sel.x === drag.x && sel.y === drag.y)) {
+        sel = { x: drag.x, y: drag.y, cell: drag.cell };
+      } else sel = null;
+    }
+    drag = null;
+  });
+  cv.addEventListener('pointercancel', e => { if (drag && e.pointerId === drag.id) drag = null; });
+
+  const raiseBtn = $('raiseBtn');
+  raiseBtn.addEventListener('pointerdown', e => { e.preventDefault(); if (running && !paused && !groups.length) raising = true; });
+  raiseBtn.addEventListener('click', () => { if (running && !paused && !groups.length) raising = true; });
+
+  addEventListener('keydown', e => {
+    if (!running) return;
+    const k = e.key;
+    if (k === 'Escape' || k === 'p' || k === 'P') { setPaused(!paused); return; }
+    if (paused) return;
+    const map = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (map[k]) {
+      e.preventDefault(); showCursor = true;
+      cursor.x = Math.max(0, Math.min(COLS - 2, cursor.x + map[k][0]));
+      cursor.y = Math.max(0, Math.min(ROWS - 1, cursor.y + map[k][1]));
+    } else if (k === ' ' || k === 'z' || k === 'Z') {
+      e.preventDefault(); showCursor = true; trySwap(cursor.x, cursor.y);
+    } else if (k === 'x' || k === 'X') {
+      if (!groups.length) raising = true;
+    }
+  });
+
+  function setPaused(v) {
+    paused = v; drag = null; sel = null;
+    Sound.pause(v);
+    $('pauseMenu').classList.toggle('show', v);
+    if (v) $('resumeBtn').focus({ preventScroll: true });
+  }
+  function start() {
+    reset(); running = true; paused = false;
+    Sound.init(); Sound.startMusic();
+    ['menu', 'pauseMenu', 'endMenu'].forEach(id => $(id).classList.remove('show'));
+  }
+  const muteBtn = $('muteBtn');
+  const muteLabel = () => { muteBtn.textContent = Sound.muted ? '♪ 音なし' : '♪ 音あり'; };
+  muteLabel();
+  muteBtn.addEventListener('click', () => { Sound.init(); Sound.toggleMute(); muteLabel(); });
+  $('startBtn').addEventListener('click', start);
+  $('againBtn').addEventListener('click', start);
+  $('quitBtn').addEventListener('click', start);
+  $('resumeBtn').addEventListener('click', () => setPaused(false));
+  $('pauseBtn').addEventListener('click', () => { if (running) setPaused(true); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && running && !paused) setPaused(true); });
+  document.addEventListener('gesturestart', e => e.preventDefault());
+
+  addEventListener('resize', layout);
+  reset();
+  layout();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(buildTiles);
+  requestAnimationFrame(loop);
+})();
+</script>
+<script>
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+  }
+</script>
+</body>
+</html>
